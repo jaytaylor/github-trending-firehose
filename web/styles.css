@@ -194,6 +194,11 @@ select:focus {
   color: var(--muted);
 }
 
+.meta.error {
+  color: #b42318;
+  font-weight: 600;
+}
+
 .results {
   max-width: 1080px;
   margin: 0 auto;

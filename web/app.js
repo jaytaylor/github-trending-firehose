@@ -15,6 +15,11 @@ const searchMeta = document.getElementById("search-meta")
 const resultsBody = document.getElementById("results-body")
 const resultsCount = document.getElementById("results-count")
 
+function setMeta(el, message, isError = false) {
+  el.textContent = message
+  el.classList.toggle("error", isError)
+}
+
 async function fetchJson(url) {
   const res = await fetch(url)
   if (!res.ok) {
@@ -122,7 +127,7 @@ snapshotDate.addEventListener("change", async () => {
 
 snapshotForm.addEventListener("submit", async (event) => {
   event.preventDefault()
-  snapshotMeta.textContent = "Loading snapshot..."
+  setMeta(snapshotMeta, "Loading snapshot...")
   try {
     const data = await fetchJson(
       `/api/snapshot?type=${snapshotType.value}&date=${snapshotDate.value}&language=${snapshotLanguage.value}`
@@ -136,15 +141,15 @@ snapshotForm.addEventListener("submit", async (event) => {
     }))
 
     setResults(rows)
-    snapshotMeta.textContent = `${rows.length} entries loaded for ${snapshotDate.value}.`
+    setMeta(snapshotMeta, `${rows.length} entries loaded for ${snapshotDate.value}.`)
   } catch (error) {
-    snapshotMeta.textContent = error.message
+    setMeta(snapshotMeta, error.message, true)
   }
 })
 
 searchForm.addEventListener("submit", async (event) => {
   event.preventDefault()
-  searchMeta.textContent = "Searching..."
+  setMeta(searchMeta, "Searching...")
 
   const language = searchLanguage.value.trim() || "(null)"
 
@@ -154,9 +159,9 @@ searchForm.addEventListener("submit", async (event) => {
     )
 
     setResults(data.results)
-    searchMeta.textContent = `${data.count} matches.`
+    setMeta(searchMeta, `${data.count} matches.`)
   } catch (error) {
-    searchMeta.textContent = error.message
+    setMeta(searchMeta, error.message, true)
   }
 })
 
@@ -167,5 +172,5 @@ async function init() {
 }
 
 init().catch((error) => {
-  snapshotMeta.textContent = error.message
+  setMeta(snapshotMeta, error.message, true)
 })
