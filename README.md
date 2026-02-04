@@ -29,27 +29,6 @@ The main implementation of this project involves the following steps:
 - Scraping GitHub Trending: We use web scraping techniques to request and parse GitHub's trending HTML pages for selected languages.
 - Data Storage: Extracted data is stored in a structured JSON format in the `archive` directory.
 
-## Analytics webserver (local)
-
-This repository includes a local-first analytics stack (Parquet + DuckDB + FastAPI) for exploring the archive.
-
-Build Parquet datasets and manifest:
-```
-PYTHONPATH=py uv run python -m gh_trending_analytics build --kind repository
-PYTHONPATH=py uv run python -m gh_trending_analytics build --kind developer
-```
-
-Start the webserver:
-```
-PYTHONPATH=py:legacy uv run python -m gh_trending_web --analytics ./analytics --port 8000
-```
-
-Then open:
-- `http://127.0.0.1:8000/repositories`
-- `http://127.0.0.1:8000/developers`
-
-Generated analytics artifacts live under `analytics/` and can be safely regenerated.
-
 ## Local UI
 
 You can browse snapshots and run searches against the archive with the built-in UI server.
