@@ -50,6 +50,15 @@ Then open:
 
 Generated analytics artifacts live under `analytics/` and can be safely regenerated.
 
+## Local UI
+
+You can browse snapshots and run searches against the archive with the built-in UI server.
+
+```bash
+npm run start -- ui archive --port=8787 --bind=127.0.0.1
+```
+
+Open `http://127.0.0.1:8787` in your browser.
 ## What languages are supported
 
 **Programming languages**
