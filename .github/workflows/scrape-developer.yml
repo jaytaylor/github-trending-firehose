@@ -22,12 +22,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve Pacific time window
+        id: pacific_time
+        run: |
+          tz="America/Los_Angeles"
+          echo "PACIFIC_DATE=$(TZ=$tz date +'%Y-%m-%d')" >> $GITHUB_ENV
+          echo "PACIFIC_YEAR=$(TZ=$tz date +'%Y')" >> $GITHUB_ENV
+          echo "PACIFIC_HOUR=$(TZ=$tz date +'%H')" >> $GITHUB_ENV
       - name: Check if archive directory for today exists
         id: check_today_archive_directory
         run: |
-          today_dir="archive/developer/$(date +'%Y')/$(date +'%Y-%m-%d')"
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "${PACIFIC_HOUR}" -lt 12 ]; then
+            echo "should_scrape_today=false" >> $GITHUB_ENV
+            echo "skip_reason=before_noon_pacific" >> $GITHUB_ENV
+            exit 0
+          fi
+          today_dir="archive/developer/${PACIFIC_YEAR}/${PACIFIC_DATE}"
           if [ -d "$today_dir" ]; then
             echo "should_scrape_today=false" >> $GITHUB_ENV
+            echo "skip_reason=archive_exists" >> $GITHUB_ENV
           else
             echo "should_scrape_today=true" >> $GITHUB_ENV
           fi
@@ -38,7 +51,7 @@ jobs:
           cache: "npm"
       - run: npm ci
         if: env.should_scrape_today == 'true'
-      - run: npm run start scrape developer $(pwd)/archive/developer/$(date +'%Y')/$(date +'%Y-%m-%d')
+      - run: npm run start scrape developer $(pwd)/archive/developer/${PACIFIC_YEAR}/${PACIFIC_DATE}
         if: env.should_scrape_today == 'true'
       - run: git status
         if: env.should_scrape_today == 'true'
@@ -48,7 +61,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add archive
-          git commit -m "chore: update developer archive $(date +'%Y-%m-%d')"
+          git commit -m "chore: update developer archive ${PACIFIC_DATE}"
           git push origin main
       - uses: actions/upload-artifact@v4
         if: env.should_scrape_today == 'true'
