@@ -6,6 +6,7 @@ import puppeteer from "puppeteer"
 import Bottleneck from "bottleneck"
 import {RepositoryLanguage, TrendingRepositoryPage} from "./scraper/TrendingRepositoryPage"
 import {DeveloperLanguage, TrendingDeveloperPage} from './scraper/TrendingDeveloperPage'
+import {startUiServer} from "./ui/server"
 
 const CONCURRENCY = 10
 const ALLOW_LANGUAGES = [
@@ -57,6 +58,7 @@ type ImportOptions = {
 type ParsedArgs = {
     positionals: string[]
     flags: Set<string>
+    values: Map<string, string>
 }
 
 async function main() {
@@ -66,6 +68,9 @@ async function main() {
     switch (command) {
         case "scrape":
             await runScrape(args)
+            break
+        case "ui":
+            await runUi(args)
             break
         case "import":
             await runImport(args)
@@ -111,6 +116,26 @@ async function runImport(args: string[]) {
     }
 }
 
+async function runUi(args: string[]) {
+    const parsed = parseArgs(args)
+    const archiveRoot = parsed.positionals[0]
+
+    if (!archiveRoot) {
+        failUsage("Missing ui archive root")
+    }
+
+    const portValue = parsed.values.get("port")
+    const bindValue = parsed.values.get("bind")
+    const port = portValue ? Number.parseInt(portValue, 10) : 8787
+    const bind = bindValue ?? "127.0.0.1"
+
+    if (!Number.isFinite(port) || port <= 0) {
+        failUsage("Invalid port")
+    }
+
+    await startUiServer({archiveRoot, port, bind})
+}
+
 async function runHfProjectsImport(args: string[]) {
     const parsed = parseArgs(args)
     const source = parsed.positionals[0]
@@ -143,19 +168,26 @@ async function runHfProjectsImport(args: string[]) {
 function parseArgs(args: string[]): ParsedArgs {
     const positionals: string[] = []
     const flags = new Set<string>()
+    const values = new Map<string, string>()
 
     for (const arg of args) {
         if (arg.startsWith("--")) {
-            const name = arg.slice(2).split("=")[0]
-            if (name.length > 0) {
-                flags.add(name)
+            const valueIndex = arg.indexOf("=")
+            const name = valueIndex > 0 ? arg.slice(2, valueIndex) : arg.slice(2)
+            if (name.length === 0) {
+                continue
+            }
+
+            flags.add(name)
+            if (valueIndex > 0) {
+                values.set(name, arg.slice(valueIndex + 1))
             }
         } else {
             positionals.push(arg)
         }
     }
 
-    return {positionals, flags}
+    return {positionals, flags, values}
 }
 
 function failUsage(message: string): never {
@@ -169,6 +201,7 @@ function printUsage() {
         [
             "Usage:",
             "  npm run start scrape <developer|repository> <archive-dir>",
+            "  npm run start ui <archive-root> [--port=8787] [--bind=127.0.0.1]",
             "  npm run start import hf-projects <csv-path-or-url> <archive-root> [--skip-existing] [--overwrite] [--dry-run]",
         ].join("\n"),
     )
