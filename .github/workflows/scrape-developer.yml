@@ -10,6 +10,9 @@ on:
     - cron: "10 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   scrape-developer:
     runs-on: ubuntu-latest
