@@ -426,7 +426,7 @@ Evidence: `.scratch/verification/SPRINT-001/001A/pytest.log`
   - `py/gh_trending_web/` (server)
   - `py/gh_trending_analytics/` (ETL + query layer)
   - `py/tests/` (pytest)
-- [X] Add documented `uv` command entrypoints (no Makefile):
+- [X] Add documented `uv` command entrypoints and Makefile wrappers for build/test (precommit guard):
 ```text
 Verified via the command/evidence blocks below; logs captured under the corresponding .scratch/verification/SPRINT-00X/<task-id>/ directory.
 ```
@@ -438,10 +438,20 @@ Evidence: `.scratch/verification/SPRINT-001/001D/web-help.log`
 Command: `PYTHONPATH=py uv run python -m gh_trending_analytics build --help`
 Exit code: `0`
 Evidence: `.scratch/verification/SPRINT-001/001B/build-help.log`
+
+Command: `make build`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001A/make-build.log`
+
+Command: `make test`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001A/make-test.log`
 ```
   - `uv run python -m pytest -q`
   - `PYTHONPATH=py uv run python -m gh_trending_web --help` (CLI help)
   - `PYTHONPATH=py uv run python -m gh_trending_analytics build --help` (build parquet from archive)
+  - `make build`
+  - `make test`
   - `uv run ruff format` + `uv run ruff check` (lint/format)
 - [X] Update `.gitignore` to exclude:
 ```text
@@ -762,8 +772,8 @@ Evidence: `.scratch/verification/SPRINT-001/001D/metrics-template-check.log`
 Positive tests:
 - `uv run python -m pytest -q py/tests/test_http_api.py` (exit 0; `.scratch/verification/SPRINT-001/001D/pytest-http-api.log`)
 - `PYTHONPATH=py uv run python -m gh_trending_web --help` (exit 0; `.scratch/verification/SPRINT-001/001D/web-help.log`)
-- `PYTHONPATH=py uv run python -m gh_trending_web --archive ./archive --analytics ./analytics --port 8001` (exit 0; `.scratch/verification/SPRINT-001/001D/server-start.log`)
-- `curl -sf http://127.0.0.1:8001/api/v1/dates?kind=repository | head` (exit 0; `.scratch/verification/SPRINT-001/001D/curl-dates.log`)
+- `bash .scratch/verification/SPRINT-001/001D/server-start.sh` (exit 0; `.scratch/verification/SPRINT-001/001D/server-start.log`)
+- `bash .scratch/verification/SPRINT-001/001D/curl-dates.sh` (exit 0; `.scratch/verification/SPRINT-001/001D/curl-dates.log`)
 
 Negative tests:
 - Invalid date format returns 400 with error envelope: `.scratch/verification/SPRINT-001/001D/http-invalid-date.log`
