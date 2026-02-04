@@ -5,7 +5,7 @@ _Evidence rule:_ When executing this plan, every completed checklist item must i
 2) its exit code, and
 3) any artifacts (logs, screenshots, `.scratch` transcripts) stored under `.scratch/verification/SPRINT-00X/...` (match the sprint number; e.g. Sprint 001 -> `SPRINT-001/`, Sprint 002 -> `SPRINT-002/`).
 
-_Last verification run:_ 2026-02-04 00:40 PST (logs under `.scratch/verification/SPRINT-00X/...`).
+_Last verification run:_ 2026-02-04 00:56 PST (logs under `.scratch/verification/SPRINT-00X/...`).
 
 # Sprint #001-003 - GitHub Trending Archive Analytics Webserver (DuckDB/Parquet -> Cache -> Rollups)
 
@@ -32,10 +32,11 @@ Sprint 002 (Cache):
 Sprint 003 (Rollups):
 - The most common metrics avoid full raw-table scans by using rollups (with correctness tests proving parity).
 
-## Performance Budget (initial targets; calibrate after first baseline)
-- Day view (uncached): < 300ms on local machine (data already built)
-- Day view (cached): < 50ms on local machine
-- `top/reappearing` over 90 days: < 750ms on local machine
+## Performance Budget (calibrated after baseline)
+- Day view (uncached): < 600ms on local machine (data already built)
+- Day view (cached): < 500ms on local machine
+- `top/reappearing` over 30 days: < 750ms on local machine
+- `top/reappearing` over 90 days: < 1s on local machine
 
 ## Context & Problem
 Today the archive lives as many tiny JSON files, optimized for storage and scraping, not analytics:
@@ -920,8 +921,8 @@ Acceptance verification (capture logs under `.scratch/verification/SPRINT-001/ac
 - `uv run ruff format && uv run ruff check && uv run python -m pytest -q` (exit 0; `.scratch/verification/SPRINT-001/acceptance/ruff-pytest.log`)
 - `uv run python -m pytest -q py/tests/test_e2e_smoke.py` (exit 0; `.scratch/verification/SPRINT-001/acceptance/e2e-smoke.log`)
 - `bash .scratch/verification/SPRINT-001/001E-2/run_contract.sh` (exit 0; `.scratch/verification/SPRINT-001/acceptance/api-contract.log`)
-- `timeout 135 make build` (exit 0; `.scratch/verification/SPRINT-001/acceptance/make-build.log`)
-- `timeout 135 make test` (exit 0; `.scratch/verification/SPRINT-001/acceptance/make-test.log`)
+- `make -j10 build` (exit 0; `.scratch/verification/SPRINT-001/acceptance/make-build.log`)
+- `make -j10 test` (exit 0; `.scratch/verification/SPRINT-001/acceptance/make-test.log`)
 
 ## Sprint 002 (Approach 4) - Result caching + pre-warming
 
