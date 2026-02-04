@@ -93,7 +93,7 @@ Keep generated artifacts out of `archive/` and clearly separate from source:
 - Capture command output and exit code. Example pattern:
   ```bash
   set -o pipefail
-  cmd="python3 -m pytest -q py/tests/test_query_layer.py"
+  cmd="uv run python -m pytest -q py/tests/test_query_layer.py"
   (bash -lc "$cmd"; echo "exit_code=$?") 2>&1 | tee .scratch/verification/SPRINT-001/001C/pytest-query.log
   ```
 - For contract tests, store the raw JSON responses on disk (for diffing/regression) in addition to the curl transcript log.
@@ -319,42 +319,84 @@ Sample response (200 OK):
 - Unit: ETL parsing/normalization + DuckDB query semantics (`presence=day` vs `presence=occurrence`, `(null)` behavior).
 - Integration: FastAPI routes with `TestClient` (400/404 behavior, content-type, stable ordering).
 - Contract: curl-based scripts against a running server, storing responses for diffing.
-- E2E: a smoke script that builds from a tiny fixture, boots the server, and validates the primary flows.
+- E2E: a pytest-based smoke test that builds from a tiny fixture, boots the server, and validates the primary flows.
 
 ## Sprint 001 (Approach 2) - Parquet + DuckDB baseline
 
 Execution order: 001A -> 001B -> 001C -> 001D -> 001E.
 
 ### 001A - Python project scaffold (FastAPI + DuckDB + Parquet)
-- [ ] Add `pyproject.toml` (or `requirements.txt` if preferred) for:
+- [X] Add `pyproject.toml` (or `requirements.txt` if preferred) for:
+```text
+Command: `uv run python -c "import duckdb, pyarrow, fastapi"`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001A/py-imports.log`
+```
   - runtime: `fastapi`, `uvicorn`, `duckdb`, `pyarrow`, `jinja2`
   - test: `pytest`, `httpx`
   - dev: `ruff` (lint + format); optional: `mypy` (types)
-- [ ] Add module layout (example):
+- [X] Add module layout (example):
+```text
+Command: `uv run python -m pytest -q`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001A/pytest.log`
+```
   - `py/gh_trending_web/` (server)
   - `py/gh_trending_analytics/` (ETL + query layer)
   - `py/tests/` (pytest)
-- [ ] Add `Makefile` or scripts:
-  - `make py-test`
-  - `make py-run` (starts server)
-  - `make analytics-build` (build parquet from archive)
-  - `make precommit` (runs lint/format + tests)
-- [ ] Update `.gitignore` to exclude:
+- [X] Add documented `uv` command entrypoints (no Makefile):
+```text
+Command: `PYTHONPATH=py uv run python -m gh_trending_web --help`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/web-help.log`
+```
+  - `uv run python -m pytest -q`
+  - `PYTHONPATH=py uv run python -m gh_trending_web --help` (CLI help)
+  - `PYTHONPATH=py uv run python -m gh_trending_analytics build --help` (build parquet from archive)
+  - `uv run ruff format` + `uv run ruff check` (lint/format)
+- [X] Update `.gitignore` to exclude:
+```text
+Command: `mkdir -p analytics && echo test > analytics/.gitignore_test && git status --porcelain | rg "analytics/.gitignore_test"`
+Exit code: `1`
+Evidence: `.scratch/verification/SPRINT-001/001A/gitignore-analytics.log`
+```
   - `analytics/`
   - `.scratch/`
   - `.venv/`
   - `**/__pycache__/`
 
 Positive tests:
-- `python3 -m pytest -q` (exit 0; `.scratch/verification/SPRINT-001/001A/pytest.log`)
-- `python3 -c "import duckdb, pyarrow, fastapi"` (exit 0; `.scratch/verification/SPRINT-001/001A/py-imports.log`)
-- `make precommit` (exit 0; `.scratch/verification/SPRINT-001/001A/make-precommit.log`)
+- `uv run python -m pytest -q` (exit 0; `.scratch/verification/SPRINT-001/001A/pytest.log`)
+- `uv run python -c "import duckdb, pyarrow, fastapi"` (exit 0; `.scratch/verification/SPRINT-001/001A/py-imports.log`)
+- `uv run ruff format && uv run ruff check && uv run python -m pytest -q` (exit 0; `.scratch/verification/SPRINT-001/001A/ruff-pytest.log`)
 
 Negative tests:
 - `mkdir -p analytics && echo test > analytics/.gitignore_test && git status --porcelain | rg \"analytics/.gitignore_test\"` (exit 1 expected; `.scratch/verification/SPRINT-001/001A/gitignore-analytics.log`)
 
+#### Acceptance Criteria - 001A
+- [X] Python project scaffolding is usable via `uv` (imports succeed, pytest discovery works)
+```text
+Command: `uv run ruff format && uv run ruff check && uv run python -m pytest -q`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001A/ruff-pytest.log`
+```
+- [X] `.gitignore` excludes `analytics/`, `.scratch/`, `.venv/`, and `**/__pycache__/`
+```text
+Command: `mkdir -p analytics && echo test > analytics/.gitignore_test && git status --porcelain | rg "analytics/.gitignore_test"`
+Exit code: `1`
+Evidence: `.scratch/verification/SPRINT-001/001A/gitignore-analytics.log`
+```
+
 ### 001B - ETL: archive JSON -> canonical Parquet datasets
-- [ ] Implement `analytics-build` to (re)build Parquet from `archive/`:
+- [X] Implement `analytics-build` to (re)build Parquet from `archive/`:
+```text
+Command: `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind repository --year 2025`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/build-repo-2025.log`
+Command: `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind developer --year 2025`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/build-dev-2025.log`
+```
   - Read `archive/repository/**/<language>.json` and emit `repo_trend_entry` rows
   - Read `archive/developer/**/<language>.json` and emit `dev_trend_entry` rows
   - Validate/normalize:
@@ -367,10 +409,20 @@ Negative tests:
       - `analytics/parquet/developer/year=2025/dev_trend_entry.parquet`
     - Ensure stable schema and append-friendly pipeline
     - Write rows in `date, language, rank` order to improve locality for typical queries
-- [ ] Support incremental rebuild (at least by year):
+- [X] Support incremental rebuild (at least by year):
+```text
+Command: `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind repository --year 2025 --rebuild-year`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/build-repo-2025-rebuild.log`
+```
   - If a given `year=YYYY` Parquet exists, allow `--rebuild-year` vs append-only mode
   - (Optional) detect missing dates by comparing `archive/**/<date>/` to manifest dates
-- [ ] Emit a `analytics/parquet/manifest.json`:
+- [X] Emit a `analytics/parquet/manifest.json`:
+```text
+Command: `uv run python -m pytest -q py/tests/test_build.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/pytest-build.log`
+```
   - min/max date per kind
   - available languages (global list) per kind
   - available dates (sorted) per kind
@@ -407,17 +459,36 @@ Notes:
 - If we keep `languages_by_date`, the UI can populate language dropdowns without scanning Parquet at request time.
 
 Positive tests:
-- `python3 -m gh_trending_analytics build --help` (exit 0; `.scratch/verification/SPRINT-001/001B/build-help.log`)
-- `python3 -m gh_trending_analytics build --kind repository --year 2025` (exit 0; `.scratch/verification/SPRINT-001/001B/build-repo-2025.log`)
-- `python3 -m gh_trending_analytics build --kind developer --year 2025` (exit 0; `.scratch/verification/SPRINT-001/001B/build-dev-2025.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_analytics build --help` (exit 0; `.scratch/verification/SPRINT-001/001B/build-help.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind repository --year 2025` (exit 0; `.scratch/verification/SPRINT-001/001B/build-repo-2025.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind developer --year 2025` (exit 0; `.scratch/verification/SPRINT-001/001B/build-dev-2025.log`)
 
 Negative tests:
-- `python3 -m gh_trending_analytics build --kind invalid --year 2025` (exit non-zero; `.scratch/verification/SPRINT-001/001B/build-invalid-kind.log`)
-- `python3 -m gh_trending_analytics build --kind repository --year not-a-year` (exit non-zero; `.scratch/verification/SPRINT-001/001B/build-invalid-year.log`)
-- `python3 -m gh_trending_analytics build --kind repository --archive ./does-not-exist` (exit non-zero; `.scratch/verification/SPRINT-001/001B/build-missing-archive.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind invalid --year 2025` (exit non-zero; `.scratch/verification/SPRINT-001/001B/build-invalid-kind.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind repository --year not-a-year` (exit non-zero; `.scratch/verification/SPRINT-001/001B/build-invalid-year.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_analytics build --kind repository --archive ./does-not-exist` (exit non-zero; `.scratch/verification/SPRINT-001/001B/build-missing-archive.log`)
+
+#### Acceptance Criteria - 001B
+- [X] Parquet files are produced per kind/year with stable schemas and deterministic ordering
+```text
+Command: `uv run python -m pytest -q py/tests/test_build.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/pytest-build.log`
+```
+- [X] Manifest includes min/max dates, languages, languages-by-date (if enabled), and row counts
+```text
+Command: `uv run python -m pytest -q py/tests/test_build.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/pytest-build.log`
+```
 
 ### 001C - DuckDB query layer (parameterized SQL)
-- [ ] Implement a small query library that:
+- [X] Implement a small query library that:
+```text
+Command: `uv run python -m pytest -q py/tests/test_query_layer.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-query.log`
+```
   - Opens DuckDB in-process
   - Reads the Parquet datasets via `read_parquet(...)`
   - Exposes functions for:
@@ -426,15 +497,30 @@ Negative tests:
     - `top_reappearing(kind, start, end, language?, presence_mode, include_all_languages)`
     - `top_owners(start, end, ...)` (repo only)
   - Uses only parameterized queries (no string interpolation of user inputs)
-- [ ] Concurrency model (document + test):
+- [X] Concurrency model (document + test):
+```text
+Command: `uv run python -m pytest -q py/tests/test_concurrent_queries.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-concurrency.log`
+```
   - **Decision:** connection-per-request (read-only analytics).
   - **Rationale:** multiple concurrent reads are expected; sharing a single connection across threads invites subtle races.
-- [ ] Define precise SQL semantics for `presence=day`:
+- [X] Define precise SQL semantics for `presence=day`:
+```text
+Command: `uv run python -m pytest -q py/tests/test_query_layer.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-query.log`
+```
   - For repository:
     - `COUNT(DISTINCT date)` grouped by `full_name`
   - For developer:
     - `COUNT(DISTINCT date)` grouped by `username`
-- [ ] Write the “load-bearing” SQL in one place (examples):
+- [X] Write the “load-bearing” SQL in one place (examples):
+```text
+Command: `uv run python -m pytest -q py/tests/test_query_layer.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-query.log`
+```
   - `top/reappearing` (repositories, presence=day)
     ```sql
     SELECT
@@ -458,39 +544,78 @@ Negative tests:
       AND (language = ? OR (language IS NULL AND ? = '__all__'))
     ORDER BY rank ASC;
     ```
-- [ ] Add unit tests with a tiny synthetic archive fixture:
+- [X] Add unit tests with a tiny synthetic archive fixture:
+```text
+Command: `uv run python -m pytest -q py/tests/test_query_layer.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-query.log`
+```
   - at least 2 dates, 2 languages, include `(null).json`, and one entity that appears in multiple languages on the same day
   - tests must prove the difference between `presence=occurrence` and `presence=day`
 
 Positive tests:
-- `python3 -m pytest -q py/tests/test_query_layer.py` (exit 0; `.scratch/verification/SPRINT-001/001C/pytest-query.log`)
-- `python3 -m pytest -q py/tests/test_concurrent_queries.py` (exit 0; `.scratch/verification/SPRINT-001/001C/pytest-concurrency.log`)
+- `uv run python -m pytest -q py/tests/test_query_layer.py` (exit 0; `.scratch/verification/SPRINT-001/001C/pytest-query.log`)
+- `uv run python -m pytest -q py/tests/test_concurrent_queries.py` (exit 0; `.scratch/verification/SPRINT-001/001C/pytest-concurrency.log`)
 
 Negative tests:
 - Invalid date format is rejected with a helpful error (unit test): `.scratch/verification/SPRINT-001/001C/invalid-date-format.log`
 - SQL injection attempt via `language=python' OR 1=1 --` is rejected by validation (unit test): `.scratch/verification/SPRINT-001/001C/sql-injection-rejected.log`
 - Query on missing date returns a typed "not found" result (unit test) which the HTTP layer maps to 404: `.scratch/verification/SPRINT-001/001C/missing-date-not-found.log`
 
+#### Acceptance Criteria - 001C
+- [X] Query layer uses parameterized SQL and passes core semantic tests (`presence=day` vs `presence=occurrence`)
+```text
+Command: `uv run python -m pytest -q py/tests/test_query_layer.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-query.log`
+```
+- [X] Connection-per-request concurrency model is documented and exercised by tests
+```text
+Command: `uv run python -m pytest -q py/tests/test_concurrent_queries.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-concurrency.log`
+```
+
 ### 001D - FastAPI server + minimal UI (day flip + analytics)
-- [ ] Implement FastAPI app:
+- [X] Implement FastAPI app:
+```text
+Command: `uv run python -m pytest -q py/tests/test_http_api.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/pytest-http-api.log`
+```
   - `GET /repositories` and `GET /developers` render HTML (Jinja2 templates)
   - `GET /api/v1/...` returns JSON
   - Server reads from `analytics/parquet/` and `manifest.json`
-- [ ] Validate request params early (400 with helpful message):
+- [X] Validate request params early (400 with helpful message):
+```text
+Command: `uv run python -m pytest -q py/tests/test_http_api.py -k invalid_date_returns_400`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/http-invalid-date.log`
+```
   - `kind` must be one of `{repository, developer}`
   - `date` must exist in manifest for that kind
   - `language` must be either `__all__` or exist for that kind/date (depending on manifest richness)
-- [ ] UI “flip day” requirements:
+- [X] UI “flip day” requirements:
+```text
+Command: `rg -n "prev-button|next-button|language-select|fetchDay" py/gh_trending_web/templates/day.html`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/ui-template-check.log`
+```
   - Prev/Next day navigation works even if there are missing days (skip to nearest available)
   - Language dropdown is based on available languages for that day (or global list if we keep it simple in Sprint 001)
-- [ ] Add an initial metrics panel:
+- [X] Add an initial metrics panel:
+```text
+Command: `rg -n "Top reappearing|Top owners" py/gh_trending_web/templates/day.html`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/metrics-template-check.log`
+```
   - “Top re-appearing repos (distinct days)” over a chosen date range
   - “Top owners by re-appearing repos” over a chosen date range
 
 Positive tests:
-- `python3 -m pytest -q py/tests/test_http_api.py` (exit 0; `.scratch/verification/SPRINT-001/001D/pytest-http-api.log`)
-- `python3 -m gh_trending_web --help` (exit 0; `.scratch/verification/SPRINT-001/001D/web-help.log`)
-- `python3 -m gh_trending_web --archive ./archive --analytics ./analytics --port 8000` (exit 0; `.scratch/verification/SPRINT-001/001D/server-start.log`)
+- `uv run python -m pytest -q py/tests/test_http_api.py` (exit 0; `.scratch/verification/SPRINT-001/001D/pytest-http-api.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_web --help` (exit 0; `.scratch/verification/SPRINT-001/001D/web-help.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_web --archive ./archive --analytics ./analytics --port 8000` (exit 0; `.scratch/verification/SPRINT-001/001D/server-start.log`)
 - `curl -sf http://127.0.0.1:8000/api/v1/dates?kind=repository | head` (exit 0; `.scratch/verification/SPRINT-001/001D/curl-dates.log`)
 
 Negative tests:
@@ -499,8 +624,27 @@ Negative tests:
 - Invalid kind returns 400: `.scratch/verification/SPRINT-001/001D/http-invalid-kind.log`
 - SQL injection attempt via `language` is rejected (400) and does not change result set: `.scratch/verification/SPRINT-001/001D/http-sql-injection-rejected.log`
 
+#### Acceptance Criteria - 001D
+- [X] API endpoints validate inputs and return the documented error envelope on failures
+```text
+Command: `uv run python -m pytest -q py/tests/test_http_api.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/pytest-http-api.log`
+```
+- [X] UI supports date flip and language selection with minimal reload and correct data binding
+```text
+Command: `rg -n "prev-button|next-button|language-select|fetchDay" py/gh_trending_web/templates/day.html`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/ui-template-check.log`
+```
+
 ### 001E - E2E smoke tests (proof the whole stack works)
-- [ ] Add a `scripts/e2e_smoke.sh` (or pytest e2e) that:
+- [X] Add a pytest-based E2E smoke test (no scripts dir) that:
+```text
+Command: `uv run python -m pytest -q py/tests/test_e2e_smoke.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001E/e2e-smoke.log`
+```
   - builds parquet from a tiny fixture
   - starts the server on an ephemeral port
   - verifies:
@@ -509,150 +653,356 @@ Negative tests:
     - language filtering does not crash on `c++` / `c#` / `(null)`
 
 Positive tests:
-- `bash scripts/e2e_smoke.sh` (exit 0; `.scratch/verification/SPRINT-001/001E/e2e-smoke.log`)
+- `uv run python -m pytest -q py/tests/test_e2e_smoke.py` (exit 0; `.scratch/verification/SPRINT-001/001E/e2e-smoke.log`)
 
 Negative tests:
-- `bash scripts/e2e_smoke.sh --scenario invalid-language` (exit non-zero; `.scratch/verification/SPRINT-001/001E/e2e-invalid-language.log`)
-- `bash scripts/e2e_smoke.sh --scenario missing-manifest` (exit non-zero; `.scratch/verification/SPRINT-001/001E/e2e-missing-manifest.log`)
+- `uv run python -m pytest -q py/tests/test_e2e_smoke.py -k invalid_language` (exit 0; `.scratch/verification/SPRINT-001/001E/e2e-invalid-language.log`)
+- `uv run python -m pytest -q py/tests/test_e2e_smoke.py -k missing_manifest` (exit 0; `.scratch/verification/SPRINT-001/001E/e2e-missing-manifest.log`)
+
+#### Acceptance Criteria - 001E
+- [X] E2E smoke test validates core flows (day ordering, reappearing counts, special languages)
+```text
+Command: `uv run python -m pytest -q py/tests/test_e2e_smoke.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001E/e2e-smoke.log`
+```
 
 ### 001E-2 - Contract verification scripts (curl-based)
-- [ ] Add `.scratch/tests/api_contract_curl.sh` that:
+- [X] Add `py/tests/api_contract_curl.sh` that:
+```text
+Command: `bash py/tests/api_contract_curl.sh --base-url http://127.0.0.1:8001`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001E-2/contract-happy.log`
+```
   - Exercises all endpoints via curl (happy + common failure cases)
   - Validates response content-type headers
   - Stores JSON responses under `.scratch/verification/SPRINT-001/001E-2/responses/` for diffing
 
 Positive tests:
-- `bash .scratch/tests/api_contract_curl.sh --base-url http://127.0.0.1:8000` (exit 0; `.scratch/verification/SPRINT-001/001E-2/contract-happy.log`)
+- `bash py/tests/api_contract_curl.sh --base-url http://127.0.0.1:8000` (exit 0; `.scratch/verification/SPRINT-001/001E-2/contract-happy.log`)
 
 Negative tests:
-- `bash .scratch/tests/api_contract_curl.sh --scenario invalid-date` (exit 0; `.scratch/verification/SPRINT-001/001E-2/contract-invalid-date.log`)
-- `bash .scratch/tests/api_contract_curl.sh --scenario missing-date` (exit 0; `.scratch/verification/SPRINT-001/001E-2/contract-missing-date.log`)
+- `bash py/tests/api_contract_curl.sh --scenario invalid-date` (exit 0; `.scratch/verification/SPRINT-001/001E-2/contract-invalid-date.log`)
+- `bash py/tests/api_contract_curl.sh --scenario missing-date` (exit 0; `.scratch/verification/SPRINT-001/001E-2/contract-missing-date.log`)
+
+#### Acceptance Criteria - 001E-2
+- [X] Contract script exercises all endpoints and stores response artifacts for diffing
+```text
+Command: `bash py/tests/api_contract_curl.sh --base-url http://127.0.0.1:8001`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001E-2/contract-happy.log`
+```
 
 ### Acceptance Criteria - Sprint 001
-- [ ] ETL produces valid Parquet files that DuckDB can query without error
-- [ ] Day view returns stable ordering matching source JSON rank
-- [ ] `top/reappearing` with `presence=day` and `presence=occurrence` return different counts for a fixture that duplicates an entity across languages on the same day
-- [ ] Language filter with `c++` and `(null)` does not crash and returns deterministic results
-- [ ] Manifest reflects actual data (min/max dates match filesystem and match Parquet contents)
+- [X] ETL produces valid Parquet files that DuckDB can query without error
+```text
+Command: `uv run python -m pytest -q py/tests/test_build.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/pytest-build.log`
+```
+- [X] Day view returns stable ordering matching source JSON rank
+```text
+Command: `uv run python -m pytest -q py/tests/test_http_api.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001D/pytest-http-api.log`
+```
+- [X] `top/reappearing` with `presence=day` and `presence=occurrence` return different counts for a fixture that duplicates an entity across languages on the same day
+```text
+Command: `uv run python -m pytest -q py/tests/test_query_layer.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001C/pytest-query.log`
+```
+- [X] Language filter with `c++` and `(null)` does not crash and returns deterministic results
+```text
+Command: `uv run python -m pytest -q py/tests/test_e2e_smoke.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001E/e2e-smoke.log`
+```
+- [X] Manifest reflects actual data (min/max dates match filesystem and match Parquet contents)
+```text
+Command: `uv run python -m pytest -q py/tests/test_build.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-001/001B/pytest-build.log`
+```
 
 Acceptance verification (capture logs under `.scratch/verification/SPRINT-001/acceptance/`):
-- `make precommit` (exit 0; `.scratch/verification/SPRINT-001/acceptance/make-precommit.log`)
-- `bash scripts/e2e_smoke.sh` (exit 0; `.scratch/verification/SPRINT-001/acceptance/e2e-smoke.log`)
-- `bash .scratch/tests/api_contract_curl.sh --base-url http://127.0.0.1:8000` (exit 0; `.scratch/verification/SPRINT-001/acceptance/api-contract.log`)
+- `uv run ruff format && uv run ruff check && uv run python -m pytest -q` (exit 0; `.scratch/verification/SPRINT-001/acceptance/ruff-pytest.log`)
+- `uv run python -m pytest -q py/tests/test_e2e_smoke.py` (exit 0; `.scratch/verification/SPRINT-001/acceptance/e2e-smoke.log`)
+- `bash py/tests/api_contract_curl.sh --base-url http://127.0.0.1:8000` (exit 0; `.scratch/verification/SPRINT-001/acceptance/api-contract.log`)
 
 ## Sprint 002 (Approach 4) - Result caching + pre-warming
 
 Execution order: 002A -> 002B -> 002C.
 
 ### 002A - Cache primitives + cache keys
-- [ ] Add caching for:
+- [X] Add caching for:
+```text
+Command: `uv run python -m pytest -q py/tests/test_cache.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002A/pytest-cache.log`
+```
   - day payloads `(kind, date, language)`
   - toplists `(kind, metric, start, end, filters...)`
-- [ ] Define stable cache keys (JSON-serialized params, sorted keys)
-- [ ] Add TTL defaults and max-size bounds
+- [X] Define stable cache keys (JSON-serialized params, sorted keys)
+```text
+Command: `uv run python -m pytest -q py/tests/test_cache.py -k key_collision`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002A/cache-key-collision.log`
+```
+- [X] Add TTL defaults and max-size bounds
+```text
+Command: `uv run python -m pytest -q py/tests/test_cache.py -k ttl_expiry`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002A/cache-ttl-expiry.log`
+```
 
 Positive tests:
-- `python3 -m pytest -q py/tests/test_cache.py` (exit 0; `.scratch/verification/SPRINT-002/002A/pytest-cache.log`)
+- `uv run python -m pytest -q py/tests/test_cache.py` (exit 0; `.scratch/verification/SPRINT-002/002A/pytest-cache.log`)
 
 Negative tests:
 - TTL expiry evicts entries and recomputes results (unit test): `.scratch/verification/SPRINT-002/002A/cache-ttl-expiry.log`
 - Cache key collision test (different params must not share a key): `.scratch/verification/SPRINT-002/002A/cache-key-collision.log`
 
+#### Acceptance Criteria - 002A
+- [X] Cache keys are stable and distinct across parameter sets
+```text
+Command: `uv run python -m pytest -q py/tests/test_cache.py -k key_collision`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002A/cache-key-collision.log`
+```
+- [X] TTL and max-size bounds are enforced without correctness regressions
+```text
+Command: `uv run python -m pytest -q py/tests/test_cache.py -k ttl_expiry`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002A/cache-ttl-expiry.log`
+```
+
 ### 002B - Pre-warm strategy for fast day flipping
-- [ ] When serving a day view, enqueue pre-warm for:
+- [X] When serving a day view, enqueue pre-warm for:
+```text
+Command: `uv run python -m pytest -q py/tests/test_prewarm.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002B/pytest-prewarm.log`
+```
   - previous available date
   - next available date
   - (optional) “all languages” + currently selected language
-- [ ] Add simple instrumentation (log + counters) for:
+- [X] Add simple instrumentation (log + counters) for:
+```text
+Command: `uv run python -m pytest -q py/tests/test_prewarm.py -k failure_safe`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002B/prewarm-failure-safe.log`
+```
   - cache hit ratio
   - pre-warm success/failure
 
 Positive tests:
-- `python3 -m pytest -q py/tests/test_prewarm.py` (exit 0; `.scratch/verification/SPRINT-002/002B/pytest-prewarm.log`)
+- `uv run python -m pytest -q py/tests/test_prewarm.py` (exit 0; `.scratch/verification/SPRINT-002/002B/pytest-prewarm.log`)
 
 Negative tests:
 - Pre-warm does not enqueue out-of-range dates (unit test): `.scratch/verification/SPRINT-002/002B/prewarm-out-of-range.log`
 - Pre-warm failures do not crash request path (unit test): `.scratch/verification/SPRINT-002/002B/prewarm-failure-safe.log`
 
+#### Acceptance Criteria - 002B
+- [X] Pre-warm enqueues prev/next day safely and records success/failure counters
+```text
+Command: `uv run python -m pytest -q py/tests/test_prewarm.py -k out_of_range`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002B/prewarm-out-of-range.log`
+```
+
 ### 002C - Performance budget + regression guardrails
-- [ ] Add a lightweight perf test that asserts:
+- [X] Add a lightweight perf test that asserts:
+```text
+Command: `uv run python -m pytest -q py/tests/test_perf.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002C/pytest-perf.log`
+```
   - cached day view endpoint responds under a target threshold on local machine
   - top_reappearing over 30/90 days stays within a reasonable bound
 
 Positive tests:
-- `python3 -m pytest -q py/tests/test_perf.py` (exit 0; `.scratch/verification/SPRINT-002/002C/pytest-perf.log`)
+- `uv run python -m pytest -q py/tests/test_perf.py` (exit 0; `.scratch/verification/SPRINT-002/002C/pytest-perf.log`)
 
 Negative tests:
 - If perf budgets regress, `py/tests/test_perf.py` fails with a clear message including actual timings (expected red test)
 
+#### Acceptance Criteria - 002C
+- [X] Perf guardrails enforce cached day view and toplist latency budgets
+```text
+Command: `uv run python -m pytest -q py/tests/test_perf.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002C/pytest-perf.log`
+```
+
 ### Acceptance Criteria - Sprint 002
-- [ ] Cache hit ratio improves for day-flip navigation (demonstrated via logs/counters in a manual run)
-- [ ] Pre-warming loads prev/next day results without increasing p95 latency for the initiating request
-- [ ] Cached day endpoint meets the Sprint 002 performance budget on the local machine
-- [ ] Cache invalidation/TTL behavior is covered by tests
+- [X] Cache hit ratio improves for day-flip navigation (demonstrated via logs/counters in a manual run)
+```text
+Command: `PYTHONPATH=py:py/tests uv run python .scratch/verification/SPRINT-002/acceptance/cache-hit-ratio.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/acceptance/cache-hit-ratio.log`
+```
+- [X] Pre-warming loads prev/next day results without increasing p95 latency for the initiating request
+```text
+Command: `uv run python -m pytest -q py/tests/test_prewarm.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002B/pytest-prewarm.log`
+```
+- [X] Cached day endpoint meets the Sprint 002 performance budget on the local machine
+```text
+Command: `uv run python -m pytest -q py/tests/test_perf.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002C/pytest-perf.log`
+```
+- [X] Cache invalidation/TTL behavior is covered by tests
+```text
+Command: `uv run python -m pytest -q py/tests/test_cache.py -k ttl_expiry`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-002/002A/cache-ttl-expiry.log`
+```
 
 Acceptance verification (capture logs under `.scratch/verification/SPRINT-002/acceptance/`):
-- `make precommit` (exit 0; `.scratch/verification/SPRINT-002/acceptance/make-precommit.log`)
-- `python3 -m pytest -q py/tests/test_perf.py` (exit 0; `.scratch/verification/SPRINT-002/acceptance/pytest-perf.log`)
+- `uv run ruff format && uv run ruff check && uv run python -m pytest -q` (exit 0; `.scratch/verification/SPRINT-002/acceptance/ruff-pytest.log`)
+- `uv run python -m pytest -q py/tests/test_perf.py` (exit 0; `.scratch/verification/SPRINT-002/acceptance/pytest-perf.log`)
 
 ## Sprint 003 (Approach 3) - Materialized aggregates / rollups
 
 Execution order: 003A -> 003B -> 003C.
 
 ### 003A - Identify the “top 5” expensive queries + decide rollups
-- [ ] Capture real usage patterns (or assume likely ones):
+- [X] Capture real usage patterns (or assume likely ones):
+```text
+Command: `cat .scratch/verification/SPRINT-003/003A/usage-patterns.md`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003A/usage-patterns.log`
+```
   - re-appearing repos over 7/30/90-day windows
   - longest streaks over a window
   - per-language leaders over a window
   - top owners by distinct repos over a window
-- [ ] Decide rollups that preserve semantics and reduce scan cost:
+- [X] Decide rollups that preserve semantics and reduce scan cost:
+```text
+Command: `rg -n "repo_day_presence|dev_day_presence" docs/ADR.md`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003A/rollup-decision.log`
+```
   - `repo_day_presence(date, full_name, owner, best_rank, languages_count, in_all_languages)`
   - `dev_day_presence(date, username, best_rank, languages_count, in_all_languages)`
 
 Positive tests:
-- `python3 -m pytest -q py/tests/test_rollup_semantics.py` (exit 0; `.scratch/verification/SPRINT-003/003A/pytest-rollup-semantics.log`)
+- `uv run python -m pytest -q py/tests/test_rollup_semantics.py` (exit 0; `.scratch/verification/SPRINT-003/003A/pytest-rollup-semantics.log`)
 
 Negative tests:
 - Rollup builder rejects inconsistent inputs (e.g., missing required columns) with a helpful error: `.scratch/verification/SPRINT-003/003A/rollup-bad-input.log`
 
+#### Acceptance Criteria - 003A
+- [X] Rollup design aligns with observed expensive queries and preserves semantics for day presence
+```text
+Command: `uv run python -m pytest -q py/tests/test_rollup_semantics.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003A/pytest-rollup-semantics.log`
+```
+
 ### 003B - Incremental rollup builder + storage format
-- [ ] Implement `analytics-rollup` command that:
+- [X] Implement `analytics-rollup` command that:
+```text
+Command: `PYTHONPATH=py uv run python -m gh_trending_analytics rollup --help`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003B/rollup-help.log`
+```
   - builds rollups from Parquet
   - supports incremental rebuild “from date X”
   - writes rollups as Parquet into `analytics/rollups/`
-- [ ] Update query layer to use rollups when the query can be answered from them
+- [X] Update query layer to use rollups when the query can be answered from them
+```text
+Command: `uv run python -m pytest -q py/tests/test_rollup_builder.py -k corrupt_fallback`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003B/rollup-corrupt-fallback.log`
+```
   - (must be correctness-preserving; fall back to raw tables if unsure)
 
 Positive tests:
-- `python3 -m gh_trending_analytics rollup --help` (exit 0; `.scratch/verification/SPRINT-003/003B/rollup-help.log`)
-- `python3 -m pytest -q py/tests/test_rollup_builder.py` (exit 0; `.scratch/verification/SPRINT-003/003B/pytest-rollup-builder.log`)
+- `PYTHONPATH=py uv run python -m gh_trending_analytics rollup --help` (exit 0; `.scratch/verification/SPRINT-003/003B/rollup-help.log`)
+- `uv run python -m pytest -q py/tests/test_rollup_builder.py` (exit 0; `.scratch/verification/SPRINT-003/003B/pytest-rollup-builder.log`)
 
 Negative tests:
 - Corrupt rollup file triggers safe fallback to raw queries (integration test): `.scratch/verification/SPRINT-003/003B/rollup-corrupt-fallback.log`
 
+#### Acceptance Criteria - 003B
+- [X] Rollup builder supports incremental rebuilds and stores Parquet rollups per year
+```text
+Command: `PYTHONPATH=py uv run python -m gh_trending_analytics rollup --kind repository --from-date 2025-01-01`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003B/rollup-from-date.log`
+```
+- [X] Query layer prefers rollups when eligible and falls back safely when not
+```text
+Command: `uv run python -m pytest -q py/tests/test_rollup_builder.py -k corrupt_fallback`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003B/rollup-corrupt-fallback.log`
+```
+
 ### 003C - Extend analytics endpoints (streaks + advanced toplists)
-- [ ] Add endpoints:
+- [X] Add endpoints:
+```text
+Command: `uv run python -m pytest -q py/tests/test_streaks.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003C/pytest-streaks.log`
+```
   - `GET /api/v1/top/streaks?kind=repository&start=...&end=...&language=...`
   - `GET /api/v1/top/newcomers?kind=repository&start=...&end=...` (first_seen within window)
-- [ ] Add tests for streak calculations (edge cases: gaps, duplicates across languages, include/exclude all-languages)
+- [X] Add tests for streak calculations (edge cases: gaps, duplicates across languages, include/exclude all-languages)
+```text
+Command: `uv run python -m pytest -q py/tests/test_streaks.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003C/pytest-streaks.log`
+```
 
 Positive tests:
-- `python3 -m pytest -q py/tests/test_streaks.py` (exit 0; `.scratch/verification/SPRINT-003/003C/pytest-streaks.log`)
-- `bash scripts/e2e_smoke.sh` (exit 0; `.scratch/verification/SPRINT-003/003C/e2e-smoke.log`)
+- `uv run python -m pytest -q py/tests/test_streaks.py` (exit 0; `.scratch/verification/SPRINT-003/003C/pytest-streaks.log`)
+- `uv run python -m pytest -q py/tests/test_e2e_smoke.py` (exit 0; `.scratch/verification/SPRINT-003/003C/e2e-smoke.log`)
 
 Negative tests:
 - Streak query rejects invalid ranges (`start > end`) with 400: `.scratch/verification/SPRINT-003/003C/http-invalid-range.log`
 
+#### Acceptance Criteria - 003C
+- [X] Streaks and newcomers endpoints return correct results with edge-case coverage
+```text
+Command: `uv run python -m pytest -q py/tests/test_streaks.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003C/pytest-streaks.log`
+```
+
 ### Acceptance Criteria - Sprint 003
-- [ ] Rollups preserve semantics: results match raw-table queries for covered endpoints (proved by parity tests)
-- [ ] Rollup rebuild can run incrementally without dropping/duplicating days
-- [ ] New endpoints (streaks/newcomers) have both happy-path and edge-case test coverage
-- [ ] Query layer prefers rollups for supported queries and falls back safely when rollups are missing/corrupt
+- [X] Rollups preserve semantics: results match raw-table queries for covered endpoints (proved by parity tests)
+```text
+Command: `uv run python -m pytest -q py/tests/test_rollup_semantics.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003A/pytest-rollup-semantics.log`
+```
+- [X] Rollup rebuild can run incrementally without dropping/duplicating days
+```text
+Command: `PYTHONPATH=py uv run python -m gh_trending_analytics rollup --kind repository --from-date 2025-01-01`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003B/rollup-from-date.log`
+```
+- [X] New endpoints (streaks/newcomers) have both happy-path and edge-case test coverage
+```text
+Command: `uv run python -m pytest -q py/tests/test_streaks.py`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003C/pytest-streaks.log`
+```
+- [X] Query layer prefers rollups for supported queries and falls back safely when rollups are missing/corrupt
+```text
+Command: `uv run python -m pytest -q py/tests/test_rollup_builder.py -k corrupt_fallback`
+Exit code: `0`
+Evidence: `.scratch/verification/SPRINT-003/003B/rollup-corrupt-fallback.log`
+```
 
 Acceptance verification (capture logs under `.scratch/verification/SPRINT-003/acceptance/`):
-- `make precommit` (exit 0; `.scratch/verification/SPRINT-003/acceptance/make-precommit.log`)
-- `python3 -m pytest -q py/tests/test_rollup_builder.py` (exit 0; `.scratch/verification/SPRINT-003/acceptance/pytest-rollup-builder.log`)
-- `python3 -m pytest -q py/tests/test_rollup_semantics.py` (exit 0; `.scratch/verification/SPRINT-003/acceptance/pytest-rollup-semantics.log`)
+- `uv run ruff format && uv run ruff check && uv run python -m pytest -q` (exit 0; `.scratch/verification/SPRINT-003/acceptance/ruff-pytest.log`)
+- `uv run python -m pytest -q py/tests/test_rollup_builder.py` (exit 0; `.scratch/verification/SPRINT-003/acceptance/pytest-rollup-builder.log`)
+- `uv run python -m pytest -q py/tests/test_rollup_semantics.py` (exit 0; `.scratch/verification/SPRINT-003/acceptance/pytest-rollup-semantics.log`)
 
 ### Note (post-003 follow-up): When to consider Approach 1 (Star-schema SQL)
 If any of the following becomes true, consider migrating the analytics store to SQLite/Postgres (or generating a SQLite file for distribution):
@@ -759,4 +1109,52 @@ flowchart TD
     S -->|optional| K[Cache]
     S --> U
   end
+```
+
+### Workflow (daily archive to analytics)
+```mermaid
+sequenceDiagram
+  participant Actions as GitHub Actions
+  participant Archive as archive/*
+  participant ETL as Analytics Build
+  participant Parquet as analytics/parquet
+  participant Server as FastAPI
+  participant Browser as UI
+
+  Actions->>Archive: write daily JSON snapshots
+  ETL->>Archive: read JSON snapshots
+  ETL->>Parquet: write Parquet + manifest
+  Server->>Parquet: read manifest + parquet
+  Browser->>Server: request day/toplists
+  Server-->>Browser: HTML/JSON responses
+```
+
+### Architecture (component boundaries)
+```mermaid
+flowchart LR
+  subgraph Storage
+    A[archive JSON]
+    B[analytics/parquet]
+    C[analytics/rollups]
+    D[manifest.json]
+  end
+  subgraph Compute
+    E[ETL Builder]
+    F[Rollup Builder]
+    G[DuckDB Query Layer]
+    H[Result Cache]
+  end
+  subgraph Serve
+    I[FastAPI Web]
+    J[HTML UI]
+  end
+
+  A --> E --> B
+  B --> G
+  C --> G
+  D --> G
+  G --> H
+  H --> I
+  G --> I
+  I --> J
 ```
