@@ -31,7 +31,7 @@ jobs:
           cache: "npm"
       - run: npm ci
         if: env.should_scrape_today == 'true'
-      - run: npm run start developer $(pwd)/archive/developer/$(date +'%Y')/$(date +'%Y-%m-%d')
+      - run: npm run start scrape  $(pwd)/archive/developer/$(date +'%Y')/$(date +'%Y-%m-%d')
         if: env.should_scrape_today == 'true'
       - run: git status
         if: env.should_scrape_today == 'true'

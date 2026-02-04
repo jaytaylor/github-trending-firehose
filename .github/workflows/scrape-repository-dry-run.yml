@@ -12,7 +12,7 @@ jobs:
           node-version: "16"
           cache: "npm"
       - run: npm ci
-      - run: npm run start repository $(pwd)/archive/repository/$(date +'%Y')/$(date +'%Y-%m-%d')
+      - run: npm run start scrape  $(pwd)/archive/repository/$(date +'%Y')/$(date +'%Y-%m-%d')
       - run: git status
       - uses: actions/upload-artifact@v4
         with:
