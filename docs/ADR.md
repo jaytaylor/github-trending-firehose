@@ -68,3 +68,21 @@ We need a lightweight local web server to expose JSON APIs and a minimal HTML UI
 ### Consequences
 - The UI is simple and fast to iterate without a dedicated frontend build step.
 - API and UI live in the same Python process, simplifying deployment for local use.
+
+## ADR-005: Static GitHub Pages deployment for the archive UI
+
+- Status: Accepted
+- Date: 2026-02-05
+
+### Context
+We want a hosted UI that refreshes daily with the archive updates. GitHub Pages provides static hosting, but the existing UI expects a local `/api` server.
+
+### Decision
+- Add a GitHub Pages deployment workflow that builds a static artifact containing `web/`, `archive/`, and a generated `api/manifest.json`.
+- Update the frontend to detect the manifest and read directly from the archive when running on GitHub Pages, while keeping the `/api` server path for local use.
+- Publish via the project site at `https://jaytaylor.github.io/github-trending-firehose/`.
+
+### Consequences
+- Searches on the hosted UI run client-side and may be slower for large ranges.
+- The GitHub Pages artifact grows with the archive size, so storage limits should be monitored over time.
+- Local UI and API behavior remain unchanged for offline use.

@@ -38,6 +38,12 @@ npm run start -- ui archive --port=8787 --bind=127.0.0.1
 ```
 
 Open `http://127.0.0.1:8787` in your browser.
+
+## Hosted UI (GitHub Pages)
+
+The static UI is deployed from `main` whenever the archive updates land, so it refreshes daily.
+
+Visit `https://jaytaylor.github.io/github-trending-firehose/`.
 ## What languages are supported
 
 **Programming languages**
