@@ -89,7 +89,7 @@ jobs:
                 const dayRoot = path.join(yearRoot, day)
                 const languages = listFiles(dayRoot)
                   .filter((name) => name.endsWith(".json"))
-                  .map((name) => name.replace(/\\.json$/, \"\"))
+                  .map((name) => name.replace(/\\.json$/, ""))
                   .sort()
                 languagesByDate[day] = languages
               }
