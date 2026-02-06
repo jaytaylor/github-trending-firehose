@@ -93,6 +93,36 @@ function setResults(rows) {
   })
 }
 
+function formatRelativeAge(value) {
+  const deltaMs = Date.now() - value.getTime()
+  if (!Number.isFinite(deltaMs)) {
+    return null
+  }
+
+  const totalSeconds = Math.max(0, Math.floor(deltaMs / 1000))
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s ago`
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m ago`
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60)
+  if (totalHours < 24) {
+    return `${totalHours}h ago`
+  }
+
+  const totalDays = Math.floor(totalHours / 24)
+  if (totalDays < 7) {
+    return `${totalDays}d ago`
+  }
+
+  const totalWeeks = Math.floor(totalDays / 7)
+  return `${totalWeeks}w ago`
+}
+
 function setLastUpdated(value) {
   if (!lastUpdated) {
     return
@@ -109,7 +139,13 @@ function setLastUpdated(value) {
     return
   }
 
-  lastUpdated.textContent = `Last updated: ${parsed.toISOString()}`
+  const relative = formatRelativeAge(parsed)
+  if (!relative) {
+    lastUpdated.textContent = `Last updated: ${parsed.toISOString()}`
+    return
+  }
+
+  lastUpdated.textContent = `Last updated: ${parsed.toISOString()} (${relative})`
 }
 
 async function resolveApiMode() {
