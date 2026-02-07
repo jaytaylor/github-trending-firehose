@@ -37,13 +37,17 @@ jobs:
           mkdir -p "$site_dir/api"
           rsync -a web/ "$site_dir/"
           rsync -a archive/ "$site_dir/archive/"
-          node <<'NODE'
+          ARCHIVE_ROOT="$site_dir/archive" node <<'NODE'
           const fs = require("fs")
           const path = require("path")
 
-          const archiveRoot = path.join(process.cwd(), "archive")
+          const archiveRoot = process.env.ARCHIVE_ROOT
           const outputPath = path.join(process.cwd(), ".scratch/pages/api/manifest.json")
           const kinds = ["repository", "developer"]
+
+          if (!archiveRoot || !fs.existsSync(archiveRoot)) {
+            throw new Error(`archive root not found: ${archiveRoot}`)
+          }
 
           function listDirs(dir) {
             if (!fs.existsSync(dir)) {

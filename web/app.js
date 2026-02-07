@@ -70,6 +70,13 @@ function formatLanguageLabel(value) {
   return value
 }
 
+function formatLanguageDisplay(value) {
+  if (!value) {
+    return "All languages"
+  }
+  return formatLanguageLabel(value)
+}
+
 function setResults(rows) {
   resultsCount.textContent = `${rows.length} rows`
   resultsBody.innerHTML = ""
@@ -97,7 +104,7 @@ function setResults(rows) {
     rank.textContent = row.rank ? `#${row.rank}` : "-"
 
     const name = document.createElement("div")
-    const languageLabel = row.language ? row.language : "all"
+    const languageLabel = formatLanguageDisplay(row.language)
     name.innerHTML = `<strong>${row.name}</strong> <span class="text-neutral-500">${languageLabel}</span>`
 
     wrapper.appendChild(date)
@@ -553,17 +560,7 @@ async function populateLanguages() {
   }
 }
 
-snapshotType.addEventListener("change", async () => {
-  await populateLatestDates()
-  await populateLanguages()
-})
-
-snapshotDate.addEventListener("change", async () => {
-  await populateLanguages()
-})
-
-snapshotForm.addEventListener("submit", async (event) => {
-  event.preventDefault()
+async function loadSnapshot({allowFallback = false} = {}) {
   setMeta(snapshotMeta, "Loading snapshot...")
   try {
     const data = await apiSnapshot(
@@ -582,8 +579,30 @@ snapshotForm.addEventListener("submit", async (event) => {
     setResults(rows)
     setMeta(snapshotMeta, `${rows.length} entries loaded for ${snapshotDate.value}.`)
   } catch (error) {
+    if (allowFallback) {
+      const latest = await apiLatest(snapshotType.value).catch(() => null)
+      if (latest?.date && latest.date !== snapshotDate.value) {
+        snapshotDate.value = latest.date
+        await populateLanguages()
+        return loadSnapshot({allowFallback: false})
+      }
+    }
     setMeta(snapshotMeta, error.message, true)
   }
+}
+
+snapshotType.addEventListener("change", async () => {
+  await populateLatestDates()
+  await populateLanguages()
+})
+
+snapshotDate.addEventListener("change", async () => {
+  await populateLanguages()
+})
+
+snapshotForm.addEventListener("submit", async (event) => {
+  event.preventDefault()
+  await loadSnapshot({allowFallback: false})
 })
 
 searchForm.addEventListener("submit", async (event) => {
@@ -617,6 +636,7 @@ async function init() {
   await loadLastUpdated()
   await populateLatestDates()
   await populateLanguages()
+  await loadSnapshot({allowFallback: true})
   searchLanguage.value = "(null)"
 
   viewLinks.forEach((link) => {
