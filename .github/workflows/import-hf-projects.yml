@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "20 * * * *"
   workflow_dispatch:
+    inputs:
+      hf_projects_csv_url:
+        description: "CSV URL or path for hf-projects import"
+        required: false
+        type: string
 
 concurrency:
   group: archive-update-${{ github.ref }}
@@ -16,21 +21,24 @@ jobs:
   import-hf-projects:
     runs-on: ubuntu-latest
     env:
-      HF_PROJECTS_SOURCE: ${{ vars.HF_PROJECTS_CSV_URL }}
+      HF_PROJECTS_SOURCE: ${{ github.event.inputs.hf_projects_csv_url || vars.HF_PROJECTS_CSV_URL || secrets.HF_PROJECTS_CSV_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: env.HF_PROJECTS_SOURCE != ''
         with:
           node-version: "16"
           cache: "npm"
       - run: npm ci
+        if: env.HF_PROJECTS_SOURCE != ''
       - name: Import hf-projects
+        if: env.HF_PROJECTS_SOURCE != ''
         run: |
-          if [ -z "$HF_PROJECTS_SOURCE" ]; then
-            echo "HF_PROJECTS_CSV_URL repository variable is not set."
-            exit 1
-          fi
           npm run start import hf-projects "$HF_PROJECTS_SOURCE" "$(pwd)/archive/repository" --skip-existing
+      - name: Skip import (missing HF_PROJECTS_SOURCE)
+        if: env.HF_PROJECTS_SOURCE == ''
+        run: |
+          echo "HF_PROJECTS_CSV_URL repository variable (or workflow input) is not set; skipping import."
       - run: git status --porcelain
       - name: Commit and push changes
         run: |
