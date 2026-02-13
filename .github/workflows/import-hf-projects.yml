@@ -25,20 +25,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        if: env.HF_PROJECTS_SOURCE != ''
         with:
           node-version: "16"
           cache: "npm"
       - run: npm ci
-        if: env.HF_PROJECTS_SOURCE != ''
       - name: Import hf-projects
         if: env.HF_PROJECTS_SOURCE != ''
         run: |
           npm run start import hf-projects "$HF_PROJECTS_SOURCE" "$(pwd)/archive/repository" --skip-existing
+      - name: Generate HF projects CSV (fallback)
+        if: env.HF_PROJECTS_SOURCE == ''
+        run: |
+          python3 py/hf_trending_transform.py --hf-trending -o /tmp/hf-projects.csv
+          npm run start import hf-projects /tmp/hf-projects.csv "$(pwd)/archive/repository" --skip-existing
       - name: Skip import (missing HF_PROJECTS_SOURCE)
         if: env.HF_PROJECTS_SOURCE == ''
         run: |
-          echo "HF_PROJECTS_CSV_URL repository variable (or workflow input) is not set; skipping import."
+          echo "HF_PROJECTS_CSV_URL repository variable (or workflow input) is not set; ran fallback transformer."
       - run: git status --porcelain
       - name: Commit and push changes
         run: |
