@@ -1,0 +1,1 @@
+{"date":"2026-04-06","language":"hcl","list":["DataDog/serverless-sample-app","terraform-aws-modules/terraform-aws-s3-bucket","Azure/terraform-azure-modules","Azure/terraform-azurerm-naming","cloudposse/terraform-aws-cloudfront-s3-cdn"]}
